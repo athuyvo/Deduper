@@ -1,0 +1,157 @@
+Anh Vo
+10/13/22 
+Version 0.1
+
+This is a genome referenced-based deduplication pseudocode. 
+Removes all PCR duplicates in a given sorted SAM file by Chromosome number then UMI. 
+This program for single-reads only. 
+
+
+	
+Create global varibles:
+
+	UMI sequences set 
+	dictionary:
+		key:{UMI, chrom, pos, strand}
+		value: ["", ""]  # list of record and flag when done searching for duplicate
+	
+	current_list: [UMI, chrom, pos, strand] # keep track of current record 
+	reverse	# boolean of reverse compl or not
+	
+	# keep track of which UMI we're checking.
+	# stop checking previous UMI when different UMI is encountered  
+	curr_UMI = ""
+	prev_UMI = ""
+
+def args: 
+	file = absolute file path to sorted .sam file 
+	outfile = absolute file path to output .sam file
+	umi = file contain lists of UMIs
+	help = some sort of useful help message to user
+
+def create_UMI_set(UMI text file):
+	take an input UMI text file 
+	parse through file 
+	create a set of UMIs 
+
+test example: 
+input = "file"
+output = {ATGC, AAATG}
+
+
+def check_umi (UMI):
+	check to see if UMI exists in UMI set
+	return a boolean 
+
+test example: 
+input = ATGC
+return = TRUE if exists in set 
+
+# takes an input record
+# parse sequence record for QNAME, bitwise flag, chromosome, position,
+# and cigar string
+
+def parse_sam(line):
+
+	Use REGEX to grab: 
+		UMI sequence in QNAME (col 1) 
+			Check if UMI is in UMI set (check_umi)
+			if yes, add to current_list[0]
+
+		bitwise FLAG (col 2) 
+			check if sequence is reverse
+			if ((flag & 16)  ==16):
+				reverse = TRUE
+				add reverse to current_list[3] 
+			else:
+				reverse = FALSE 
+
+		chromosome RNAME (col 3)
+			add chromosome num to current_list[2]
+
+		left-most postion POS (col 4)
+			add POS to current_list[1]
+
+		cigar string (col 6)
+
+return cigar string 
+
+test example:
+input = "NS123:154:ABC:1:11101:347:19169:AAA	0	2	768	36	71M	*	0	0"
+output = [AAA, 0, 2, FALSE] "71M"
+
+# parse input cigar string
+# store alignment match, soft clipping, skipped regions, and deletion variables
+# update position 
+
+def cigar_parse(cigar string)
+	Use REGEX and find cigar string and parse for:
+		
+
+		if strand is forward (reverse == FALSE):
+			left soft clipping = ([0-9]+S\[0-9]+M) 
+				if soft clipping > 0 
+					adjust position in dictionary:
+					position = position - 2
+
+		if strand is reverse (reverse == TRUE):  
+			alignment match = ([0-9]+M)
+			deletion = ([0-9]+D)
+			right soft clipping = ([0-9]+S\[0-9]+M<='[0-9]+S')
+			skipped region ([0-9]+N)
+				if skipped region > 0:
+					right alignment match ([0-9]+M<='[0-9]+S')
+
+			adjust position in dictionary if variables aren't empty:
+			position = position + alignment match + skipped region + right alignment match 
+                        + right soft clipping +  deletion - 1 (left adjusted, inclusive)
+
+test example:
+input: "5M1024N10M", strand = reverse
+output: 
+	alignment = 5
+	deletion = 0
+	right soft clip = 0
+	skipped region = 1024
+	right alignment = 10
+
+def write_out(dict)
+	write out record to new .sam file 
+	
+
+line = "" # declare sequence line 
+
+Read in UMI text file.
+Read sorted input .sam file (will be sorted by chromosome then by UMI).
+Open write file. 
+
+Write out "@" headers to .sam file
+	
+	if line != contain "@" or is empty:
+		set seq_record = line # save to write out unique record 
+
+line = record 
+Use REGEX to grab line before sequence.
+
+cigar_string = parse_sam(line)
+parse_cigar(cigar_string)
+prev_UMI = curr_UMI # set previously checked UMI to current UMI 
+curr_UMI = UMI 
+
+
+if prev_UMI != curr_UMI:
+	done searching for duplicates for this UMI
+	reset dictionary
+	reset prev_UMI and curr_UMI
+
+else not done checking for duplicates: 
+
+	if {chrom, pos, strand, UMI} is in dictionary:
+		if yes, duplicate is found:
+			if dict value[1] != "done"
+				write out first record to .sam file: value[0]
+				set dict value[1] = "done"
+				remove record from dict: dict value[1] = ""
+	else not in dictionary:
+		add {chrom, pos, strand, UMI} as key to dictionary
+		set value[0] to record
